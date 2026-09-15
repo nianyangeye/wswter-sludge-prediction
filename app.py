@@ -236,8 +236,8 @@ def show_main():
             st.dataframe(st.session_state.history_data, use_container_width=True, height=400)
 
     with tab2:
-        # ✅ 极致简化：只有一条线，减少内存开销
-        st.subheader("⏳ 进水COD时间序列趋势（极简版）")
+        # ✅ 时间序列保留（简化了样式，只画一条线，非常省内存）
+        st.subheader("⏳ 进水COD时间序列趋势")
         ts_data = pd.DataFrame({"样本序号": range(len(X)), "进水COD": X["进水COD"]})
         fig_ts = px.line(ts_data, x="样本序号", y="进水COD", title="历史进水COD变化趋势")
         fig_ts.update_layout(template=st.session_state.theme)
@@ -298,28 +298,73 @@ def show_main():
                 st.download_button(f"📥 下载 {selected_model} 特征重要性数据表", df_single.to_csv(index=False).encode('utf-8-sig'), f"{target_var_fi}_{selected_model}_特征重要性.csv", "text/csv", key="dl_fi_single")
 
     with tab4:
-        # ✅ 彻底移除散点图，只保留纯数字和表格，大幅降低内存
+        # ✅ 只删除了散点图，保留了按钮、全对比柱状图、箱线图
         st.subheader("🤖 模型性能评价与对比分析")
         target_var_metric = st.selectbox("选择目标变量进行评价", ["有机质占比", "污泥沉降指数SVI"], key="metric_target_var")
         current_metrics = metrics_dict[target_var_metric]
 
-        st.markdown("### 📊 模型评价指标对比（仅保留核心表格与柱状图）")
+        st.markdown("### 📊 模型评价指标对比")
+        col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
+        with col_met1: btn_r2 = st.button("R²", use_container_width=True, key="metric_btn_r2")
+        with col_met2: btn_rmse = st.button("RMSE", use_container_width=True, key="metric_btn_rmse")
+        with col_met3: btn_mae = st.button("MAE", use_container_width=True, key="metric_btn_mae")
+        with col_met4: btn_mape = st.button("MAPE", use_container_width=True, key="metric_btn_mape")
+        with col_met5: btn_all_metrics = st.button("📊 全部评价指标对比", use_container_width=True, key="metric_btn_all")
+
+        model_names = list(current_metrics.keys())
+        if btn_all_metrics:
+            fig_all_metrics = go.Figure()
+            for metric_name in ["R²", "RMSE", "MAE", "MAPE"]:
+                fig_all_metrics.add_trace(go.Bar(x=model_names, y=[current_metrics[m][metric_name] for m in model_names], name=metric_name))
+            fig_all_metrics.update_layout(title=f"全部评价指标对比 - {target_var_metric}", barmode='group', template=st.session_state.theme)
+            st.plotly_chart(fig_all_metrics, use_container_width=True)
+        else:
+            selected_metric = None
+            if btn_r2: selected_metric = "R²"
+            elif btn_rmse: selected_metric = "RMSE"
+            elif btn_mae: selected_metric = "MAE"
+            elif btn_mape: selected_metric = "MAPE"
+
+            if selected_metric:
+                values = [current_metrics[m][selected_metric] for m in model_names]
+                fig_bar = px.bar(x=model_names, y=values, title=f"{selected_metric} 对比", color=model_names, template=st.session_state.theme)
+                st.plotly_chart(fig_bar, use_container_width=True)
+
         df_metrics = pd.DataFrame(current_metrics).T
-        st.dataframe(df_metrics, use_container_width=True)
+        st.dataframe(df_metrics)
         st.download_button(f"📥 下载 {target_var_metric} 评价指标表", df_metrics.to_csv().encode('utf-8-sig'), f"{target_var_metric}_评价指标.csv", "text/csv", key="dl_metrics")
 
-        # 选择一个指标画简单的柱状图
-        metric_choice = st.selectbox("选择要展示的评价指标", ["R²", "RMSE", "MAE", "MAPE"], key="metric_choice")
-        model_names = list(current_metrics.keys())
-        values = [current_metrics[m][metric_choice] for m in model_names]
-        fig_bar = px.bar(x=model_names, y=values, title=f"{metric_choice} 对比", color=model_names, template=st.session_state.theme)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.markdown("### 📦 误差分布（箱线图）")
+        y_pred_linear = current_models["Linear"].predict(X_test)
+        y_pred_lasso = current_models["Lasso"].predict(X_test)
+        y_pred_rf = current_models["RF"].predict(X_test)
+        y_pred_xgb = current_models["XGBoost"].predict(X_test)
+        df_error = pd.DataFrame({
+            "模型": ["Linear"]*len(y_test) + ["Lasso"]*len(y_test) + ["RF"]*len(y_test) + ["XGBoost"]*len(y_test),
+            "绝对误差": np.concatenate([
+                np.abs(y_test - y_pred_linear), np.abs(y_test - y_pred_lasso),
+                np.abs(y_test - y_pred_rf), np.abs(y_test - y_pred_xgb)
+            ])
+        })
+        fig_box = px.box(df_error, x="模型", y="绝对误差", color="模型", title=f"Absolute Error Distribution - {target_var_metric}", template=st.session_state.theme)
+        st.plotly_chart(fig_box, use_container_width=True)
 
     with tab5:
         st.subheader("🔍 SHAP 模型可解释性分析")
         target_var_shap = st.selectbox("🎯 请选择SHAP分析的目标变量", ["有机质占比", "污泥沉降指数SVI"], key="shap_target_select")
         shap_model = st.selectbox("选择SHAP分析的模型", ["Linear", "Lasso", "RF", "XGBoost"], key="shap_model_select")
         shap_vals = shap_dict[target_var_shap][shap_model]
+
+        st.markdown("### 🐝 SHAP 蜂群图 (特征分布影响)")
+        fig_bee = go.Figure()
+        for i, feature in enumerate(X.columns):
+            fig_bee.add_trace(go.Scatter(
+                x=shap_vals.values[:, i], y=[feature]*len(shap_vals.values),
+                mode='markers', marker=dict(size=8, color=shap_vals.values[:, i], colorscale='RdBu_r'),
+                showlegend=False
+            ))
+        fig_bee.update_layout(title=f"SHAP Beeswarm Plot - {target_var_shap}", xaxis_title="SHAP Value", yaxis_title="Feature", template=st.session_state.theme)
+        st.plotly_chart(fig_bee, use_container_width=True)
 
         st.markdown("### 📊 SHAP 条形图 (特征平均贡献度)")
         mean_shap = np.abs(shap_vals.values).mean(axis=0)
