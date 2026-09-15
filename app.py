@@ -309,30 +309,25 @@ def show_main():
         y_pred_rf = current_models["RF"].predict(X_test)
         y_pred_xgb = current_models["XGBoost"].predict(X_test)
 
-        # ✅ 终极稳定修复：手动绘制一条30度左右向下的理想线（不再使用 trendline）
-        # 获取 X 轴的边界值
-        x_min, x_max = min(y_test), max(y_test)
-        # 构造一条从 (x_min, x_max) 到 (x_max, x_min) 的向下线，这就是最符合你描述的趋势线
+        # ✅ 最终修复：手动计算并绘制贴合数据点的趋势线
+        def draw_scatter_with_trend(x_data, y_data, title):
+            fig = px.scatter(x=x_data, y=y_data, title=title)
+            # 使用 numpy 拟合一条直线 y = mx + b
+            z = np.polyfit(x_data, y_data, 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(min(x_data), max(x_data), 100)
+            fig.add_trace(go.Scatter(x=x_line, y=p(x_line), mode='lines', name='趋势线', line=dict(color='red', dash='dash')))
+            fig.update_layout(template=st.session_state.theme)
+            return fig
+
         with col_s1:
-            fig_s1 = px.scatter(x=y_test, y=y_pred_linear, title=f"Linear (R²={current_metrics['Linear']['R²']})")
-            fig_s1.add_trace(go.Scatter(x=[x_min, x_max], y=[x_max, x_min], mode='lines', name='Ideal', line=dict(color='red', dash='dash')))
-            fig_s1.update_layout(template=st.session_state.theme)
-            st.plotly_chart(fig_s1, use_container_width=True)
+            st.plotly_chart(draw_scatter_with_trend(y_test, y_pred_linear, f"Linear (R²={current_metrics['Linear']['R²']})"), use_container_width=True)
         with col_s2:
-            fig_s2 = px.scatter(x=y_test, y=y_pred_lasso, title=f"Lasso (R²={current_metrics['Lasso']['R²']})")
-            fig_s2.add_trace(go.Scatter(x=[x_min, x_max], y=[x_max, x_min], mode='lines', name='Ideal', line=dict(color='red', dash='dash')))
-            fig_s2.update_layout(template=st.session_state.theme)
-            st.plotly_chart(fig_s2, use_container_width=True)
+            st.plotly_chart(draw_scatter_with_trend(y_test, y_pred_lasso, f"Lasso (R²={current_metrics['Lasso']['R²']})"), use_container_width=True)
         with col_s3:
-            fig_s3 = px.scatter(x=y_test, y=y_pred_rf, title=f"RF (R²={current_metrics['RF']['R²']})")
-            fig_s3.add_trace(go.Scatter(x=[x_min, x_max], y=[x_max, x_min], mode='lines', name='Ideal', line=dict(color='red', dash='dash')))
-            fig_s3.update_layout(template=st.session_state.theme)
-            st.plotly_chart(fig_s3, use_container_width=True)
+            st.plotly_chart(draw_scatter_with_trend(y_test, y_pred_rf, f"RF (R²={current_metrics['RF']['R²']})"), use_container_width=True)
         with col_s4:
-            fig_s4 = px.scatter(x=y_test, y=y_pred_xgb, title=f"XGBoost (R²={current_metrics['XGBoost']['R²']})")
-            fig_s4.add_trace(go.Scatter(x=[x_min, x_max], y=[x_max, x_min], mode='lines', name='Ideal', line=dict(color='red', dash='dash')))
-            fig_s4.update_layout(template=st.session_state.theme)
-            st.plotly_chart(fig_s4, use_container_width=True)
+            st.plotly_chart(draw_scatter_with_trend(y_test, y_pred_xgb, f"XGBoost (R²={current_metrics['XGBoost']['R²']})"), use_container_width=True)
 
         st.markdown("### 📊 模型评价指标对比")
         col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
